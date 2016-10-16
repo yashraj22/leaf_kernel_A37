@@ -388,7 +388,7 @@ static ssize_t store_disable(struct cpu_data *state,
 {
 	unsigned int val;
 
-	if (sscanf(buf, "%u\n", &val) != 1)
+	if (kstrtouint(buf, 0, &val))
 		return -EINVAL;
 
 	val = !!val;
