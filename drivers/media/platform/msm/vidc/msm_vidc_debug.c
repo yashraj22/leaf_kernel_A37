@@ -212,7 +212,7 @@ failed_create_dir:
 struct dentry *msm_vidc_debugfs_init_core(struct msm_vidc_core *core,
 		struct dentry *parent)
 {
-	struct dentry *dir = NULL;
+	struct dentry *dir;
 	char debugfs_name[MAX_DEBUGFS_NAME];
 	if (!core) {
 		dprintk(VIDC_ERR, "Invalid params, core: %p\n", core);
@@ -221,21 +221,24 @@ struct dentry *msm_vidc_debugfs_init_core(struct msm_vidc_core *core,
 
 	snprintf(debugfs_name, MAX_DEBUGFS_NAME, "core%d", core->id);
 	dir = debugfs_create_dir(debugfs_name, parent);
-	if (!dir) {
+	if (IS_ERR_OR_NULL(dir)) {
 		dprintk(VIDC_ERR, "Failed to create debugfs for msm_vidc\n");
 		goto failed_create_dir;
 	}
-	if (!debugfs_create_file("info", S_IRUGO, dir, core, &core_info_fops)) {
+
+	if (IS_ERR_OR_NULL(debugfs_create_file("info", S_IRUGO, dir, core, &core_info_fops))) {
 		dprintk(VIDC_ERR, "debugfs_create_file: fail\n");
-		goto failed_create_dir;
+		goto failed_create_file;
 	}
-	if (!debugfs_create_file("trigger_ssr", S_IWUSR,
-			dir, core, &ssr_fops)) {
+	if (IS_ERR_OR_NULL(debugfs_create_file("trigger_ssr", S_IWUSR,
+			dir, core, &ssr_fops))) {
 		dprintk(VIDC_ERR, "debugfs_create_file: fail\n");
-		goto failed_create_dir;
+		goto failed_create_file;
 	}
+failed_create_file:
+	debugfs_remove_recursive(dir);
 failed_create_dir:
-	return dir;
+	return NULL;
 }
 
 static int inst_info_open(struct inode *inode, struct file *file)
@@ -351,7 +354,7 @@ static const struct file_operations inst_info_fops = {
 struct dentry *msm_vidc_debugfs_init_inst(struct msm_vidc_inst *inst,
 		struct dentry *parent)
 {
-	struct dentry *dir = NULL;
+	struct dentry *dir, *info;
 	char debugfs_name[MAX_DEBUGFS_NAME];
 	if (!inst) {
 		dprintk(VIDC_ERR, "Invalid params, inst: %p\n", inst);
@@ -359,17 +362,26 @@ struct dentry *msm_vidc_debugfs_init_inst(struct msm_vidc_inst *inst,
 	}
 	snprintf(debugfs_name, MAX_DEBUGFS_NAME, "inst_%p", inst);
 	dir = debugfs_create_dir(debugfs_name, parent);
-	if (!dir) {
+	if (IS_ERR_OR_NULL(dir)) {
 		dprintk(VIDC_ERR, "Failed to create debugfs for msm_vidc\n");
 		goto failed_create_dir;
 	}
-	if (!debugfs_create_file("info", S_IRUGO, dir, inst, &inst_info_fops)) {
+
+	info = debugfs_create_file("info", S_IRUGO, dir,
+			idata, &inst_info_fops);
+	if (IS_ERR_OR_NULL(info)) {
 		dprintk(VIDC_ERR, "debugfs_create_file: fail\n");
 		goto failed_create_dir;
 	}
 	inst->debug.pdata[FRAME_PROCESSING].sampling = true;
-failed_create_dir:
 	return dir;
+
+failed_create_file:
+	debugfs_remove_recursive(dir);
+failed_create_dir:
+	kfree(idata);
+exit:
+	return NULL;
 }
 
 void msm_vidc_debugfs_update(struct msm_vidc_inst *inst,
