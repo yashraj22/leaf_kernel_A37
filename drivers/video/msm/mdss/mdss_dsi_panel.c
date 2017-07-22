@@ -24,7 +24,7 @@
 #if defined(CONFIG_MACH_OPPO) && defined(CONFIG_BACKLIGHT_LM3630)
 #include <soc/oppo/oppo_project.h>
 #endif
-
+#include <linux/display_state.h>
 #include "mdss_dsi.h"
 #include "mdss_livedisplay.h"
 
@@ -40,6 +40,13 @@
 
 #define MIN_REFRESH_RATE 48
 #define DEFAULT_MDP_TRANSFER_TIME 14000
+
+bool display_on = true;
+
+bool is_display_on()
+{
+	return display_on;
+}
 
 DEFINE_LED_TRIGGER(bl_led_trigger);
 
@@ -688,6 +695,8 @@ static int mdss_dsi_panel_off(struct mdss_panel_data *pdata)
 		pr_err("%s: Invalid input data\n", __func__);
 		return -EINVAL;
 	}
+
+	display_on = false;
 
 	pinfo = &pdata->panel_info;
 	ctrl = container_of(pdata, struct mdss_dsi_ctrl_pdata,
