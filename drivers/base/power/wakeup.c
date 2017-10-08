@@ -29,19 +29,19 @@ bool wl_blocker_debug = false;
 static void wakeup_source_deactivate(struct wakeup_source *ws);
 #endif
 
-static bool enable_qcom_rx_wakelock_ws = true;
+static bool enable_qcom_rx_wakelock_ws = false;
 module_param(enable_qcom_rx_wakelock_ws, bool, 0644);
-static bool enable_wlan_extscan_wl_ws = true;
+static bool enable_wlan_extscan_wl_ws = false;
 module_param(enable_wlan_extscan_wl_ws, bool, 0644);
-static bool enable_ipa_ws = true;
+static bool enable_ipa_ws = false;
 module_param(enable_ipa_ws, bool, 0644);
-static bool enable_wlan_ws = true;
+static bool enable_wlan_ws = false;
 module_param(enable_wlan_ws, bool, 0644);
-static bool enable_timerfd_ws = true;
+static bool enable_timerfd_ws = false;
 module_param(enable_timerfd_ws, bool, 0644);
-static bool enable_netlink_ws = true;
+static bool enable_netlink_ws = false;
 module_param(enable_netlink_ws, bool, 0644);
-static bool enable_netmgr_wl_ws = true;
+static bool enable_netmgr_wl_ws = false;
 module_param(enable_netmgr_wl_ws, bool, 0644);
 
 /*
@@ -528,7 +528,6 @@ static void wakeup_source_activate(struct wakeup_source *ws)
 	trace_wakeup_source_activate(ws->name, cec);
 }
 
-<<<<<<< HEAD
 #ifdef CONFIG_BOEFFLA_WL_BLOCKER
 // AP: Function to check if a wakelock is on the wakelock blocker list
 static bool check_for_block(struct wakeup_source *ws)
@@ -579,7 +578,7 @@ static bool check_for_block(struct wakeup_source *ws)
 	return false;
 }
 #endif
-=======
+
 static bool wakeup_source_blocker(struct wakeup_source *ws)
 {
 	unsigned int wslen = 0;
@@ -612,7 +611,6 @@ static bool wakeup_source_blocker(struct wakeup_source *ws)
 
 	return false;
 }
->>>>>>> 0679108032a5... drivers: wakeup: block some bastard wakeups
 
 /**
  * wakeup_source_report_event - Report wakeup event using the given source.
@@ -620,14 +618,11 @@ static bool wakeup_source_blocker(struct wakeup_source *ws)
  */
 static void wakeup_source_report_event(struct wakeup_source *ws)
 {
-<<<<<<< HEAD
 #ifdef CONFIG_BOEFFLA_WL_BLOCKER
 	if (!check_for_block(ws))	// AP: check if wakelock is on wakelock blocker list
 	{
 #endif
-=======
 	if (!wakeup_source_blocker(ws)) {
->>>>>>> 0679108032a5... drivers: wakeup: block some bastard wakeups
 		ws->event_count++;
 		/* This is racy, but the counter is approximate anyway. */
 		if (events_check_enabled)
@@ -635,13 +630,10 @@ static void wakeup_source_report_event(struct wakeup_source *ws)
 
 		if (!ws->active)
 			wakeup_source_activate(ws);
-<<<<<<< HEAD
 #ifdef CONFIG_BOEFFLA_WL_BLOCKER
 	}
 #endif
-=======
 	}
->>>>>>> 0679108032a5... drivers: wakeup: block some bastard wakeups
 }
 
 /**
@@ -691,7 +683,6 @@ void pm_stay_awake(struct device *dev)
 }
 EXPORT_SYMBOL_GPL(pm_stay_awake);
 
-<<<<<<< HEAD
 #ifdef CONFIG_PM_AUTOSLEEP
 static void update_prevent_sleep_time(struct wakeup_source *ws, ktime_t now)
 {
@@ -760,8 +751,6 @@ static void wakeup_source_deactivate(struct wakeup_source *ws)
 		wake_up(&wakeup_count_wait_queue);
 }
 
-=======
->>>>>>> 0679108032a5... drivers: wakeup: block some bastard wakeups
 /**
  * __pm_relax - Notify the PM core that processing of a wakeup event has ended.
  * @ws: Wakeup source object associated with the source of the event.
