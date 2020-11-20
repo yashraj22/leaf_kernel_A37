@@ -1985,11 +1985,11 @@ restart:
 				if (scan < LAST_SCAN)
 					goto continue_resched;
 
-				/*
+
 				 * On the last scan, we clean up all those tags
 				 * we inserted; but make a note that we still
 				 * found pages pinned.
-				 */ /*
+
 				error = -EBUSY;
 			}
 

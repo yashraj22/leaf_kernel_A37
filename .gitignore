@@ -9,6 +9,11 @@
 #
 # Normal rules
 #
+out/
+compile.sh
+build.sh
+anykernel3/
+anykernel3
 .*
 *.o
 *.o.*
