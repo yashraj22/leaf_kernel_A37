@@ -30,8 +30,8 @@
 struct msm_actuator_ctrl_t;
 
 enum msm_actuator_state_t {
-	ACTUATOR_POWER_DOWN,
 	ACTUATOR_POWER_UP,
+	ACTUATOR_POWER_DOWN,
 };
 
 struct msm_actuator_func_tbl {
@@ -102,6 +102,13 @@ struct msm_actuator_ctrl_t {
 	struct msm_actuator_vreg vreg_cfg;
 	struct park_lens_data_t park_lens;
 	uint32_t max_code_size;
+	bool regulator_active;
+#ifdef VENDOR_EDIT
+/*shijie.zhuo,2014/09/10,Add for close camera click*/
+	uint16_t current_lens_pos;
+	uint32_t hw_params;
+	enum actuator_type act_type;
+#endif
 };
 
 #endif

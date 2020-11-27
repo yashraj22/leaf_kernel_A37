@@ -1,5 +1,4 @@
 /* Copyright (c) 2012-2014, The Linux Foundation. All rights reserved.
- * Copyright (C) 2016 XiaoMi, Inc.
  *
  * This program is free software; you can redistribute it and/or modify
  * it under the terms of the GNU General Public License version 2 and
@@ -28,7 +27,12 @@
 #include <linux/iommu.h>
 #include <linux/platform_device.h>
 #include <media/v4l2-fh.h>
-
+#ifdef VENDOR_EDIT
+/*Added by Jinshui.Liu@Camera 20150714 start for print camera time*/
+#include <linux/time.h>
+#include <linux/rtc.h>
+#endif
+#include <linux/mutex.h>
 #include "camera.h"
 #include "msm.h"
 #include "msm_vb2.h"
@@ -41,7 +45,6 @@ struct camera_v4l2_private {
 	unsigned int stream_id;
 	unsigned int is_vb2_valid; /*0 if no vb2 buffers on stream, else 1*/
 	struct vb2_queue vb2_q;
-	struct mutex lock;
 };
 
 static void camera_pack_event(struct file *filep, int evt_id,
@@ -210,9 +213,9 @@ static int camera_v4l2_reqbufs(struct file *filep, void *fh,
 	session = msm_session_find(session_id);
 	if (WARN_ON(!session))
 		return -EIO;
-	mutex_lock(&sp->lock);
+	mutex_lock(&session->lock);
 	ret = vb2_reqbufs(&sp->vb2_q, req);
-	mutex_unlock(&sp->lock);
+	mutex_unlock(&session->lock);
 	return ret;
 }
 
@@ -233,9 +236,9 @@ static int camera_v4l2_qbuf(struct file *filep, void *fh,
 	session = msm_session_find(session_id);
 	if (WARN_ON(!session))
 		return -EIO;
-	mutex_lock(&sp->lock);
+	mutex_lock(&session->lock);
 	ret = vb2_qbuf(&sp->vb2_q, pb);
-	mutex_unlock(&sp->lock);
+	mutex_unlock(&session->lock);
 	return ret;
 }
 
@@ -250,9 +253,9 @@ static int camera_v4l2_dqbuf(struct file *filep, void *fh,
 	session = msm_session_find(session_id);
 	if (WARN_ON(!session))
 		return -EIO;
-	mutex_lock(&sp->lock);
+	mutex_lock(&session->lock);
 	ret = vb2_dqbuf(&sp->vb2_q, pb, filep->f_flags & O_NONBLOCK);
-	mutex_unlock(&sp->lock);
+	mutex_unlock(&session->lock);
 	return ret;
 }
 
@@ -326,12 +329,9 @@ static int camera_v4l2_s_fmt_vid_cap_mplane(struct file *filep, void *fh,
 
 	if (pfmt->type == V4L2_BUF_TYPE_VIDEO_CAPTURE_MPLANE) {
 
-		mutex_lock(sp->vb2_q.lock);
-		if (WARN_ON(!sp->vb2_q.drv_priv)) {
-			rc = -ENOMEM;
-			mutex_unlock(sp->vb2_q.lock);
-			goto done;
-	}
+		if (WARN_ON(!sp->vb2_q.drv_priv))
+			return -ENOMEM;
+
 		memcpy(sp->vb2_q.drv_priv, pfmt->fmt.raw_data,
 			sizeof(struct msm_v4l2_format_data));
 		user_fmt = (struct msm_v4l2_format_data *)sp->vb2_q.drv_priv;
@@ -340,27 +340,26 @@ static int camera_v4l2_s_fmt_vid_cap_mplane(struct file *filep, void *fh,
 					user_fmt->num_planes);
 		/*num_planes need to bound checked, otherwise for loop
 		can execute forever */
-		if (WARN_ON(user_fmt->num_planes > VIDEO_MAX_PLANES)) {
-			rc = -EINVAL;
-			mutex_unlock(sp->vb2_q.lock);
-			goto done;
-		}
+		if (WARN_ON(user_fmt->num_planes > VIDEO_MAX_PLANES))
+			return -EINVAL;
 		for (i = 0; i < user_fmt->num_planes; i++)
 			pr_debug("%s: plane size[%d]\n", __func__,
 					user_fmt->plane_sizes[i]);
-		mutex_unlock(sp->vb2_q.lock);
+
 		camera_pack_event(filep, MSM_CAMERA_SET_PARM,
 			MSM_CAMERA_PRIV_S_FMT, -1, &event);
 
 		rc = msm_post_event(&event, MSM_POST_EVT_TIMEOUT);
 		if (rc < 0)
-			goto done;
+			return rc;
+
 		rc = camera_check_event_status(&event);
 		if (rc < 0)
-			goto done;
+			return rc;
+
 		sp->is_vb2_valid = 1;
 	}
-done:
+
 	return rc;
 
 }
@@ -483,8 +482,6 @@ static int camera_v4l2_fh_open(struct file *filep)
 		(const unsigned long *)&stream_id, MSM_CAMERA_STREAM_CNT_BITS);
 	pr_debug("%s: Found stream_id=%d\n", __func__, sp->stream_id);
 
-	mutex_init(&sp->lock);
-
 	v4l2_fh_init(&sp->fh, pvdev->vdev);
 	v4l2_fh_add(&sp->fh);
 
@@ -500,7 +497,6 @@ static int camera_v4l2_fh_release(struct file *filep)
 		v4l2_fh_exit(&sp->fh);
 	}
 
-	mutex_destroy(&sp->lock);
 	kzfree(sp);
 	return 0;
 }
@@ -519,12 +515,6 @@ static int camera_v4l2_vb2_q_init(struct file *filep)
 		pr_err("%s : memory not available\n", __func__);
 		return -ENOMEM;
 	}
-	q->lock = kzalloc(sizeof(struct mutex), GFP_KERNEL);
-	if (!q->lock) {
-		kzfree(q->drv_priv);
-		return -ENOMEM;
-	}
-	mutex_init(q->lock);
 
 	q->mem_ops = msm_vb2_get_q_mem_ops();
 	q->ops = msm_vb2_get_q_ops();
@@ -543,11 +533,7 @@ static void camera_v4l2_vb2_q_release(struct file *filep)
 	struct camera_v4l2_private *sp = filep->private_data;
 
 	kzfree(sp->vb2_q.drv_priv);
-	mutex_lock(&sp->lock);
 	vb2_queue_release(&sp->vb2_q);
-	mutex_destroy(sp->vb2_q.lock);
-	kzfree(sp->vb2_q.lock);
-	mutex_unlock(&sp->lock);
 }
 
 static int camera_v4l2_open(struct file *filep)
@@ -556,7 +542,24 @@ static int camera_v4l2_open(struct file *filep)
 	struct v4l2_event event;
 	struct msm_video_device *pvdev = video_drvdata(filep);
 	unsigned int opn_idx, idx;
+#ifdef VENDOR_EDIT
+/*Added by Jinshui.Liu@Camera 20150714 start for print camera time*/
+	struct timespec ts;
+	struct rtc_time tm;
+#endif
 	BUG_ON(!pvdev);
+
+	mutex_lock(&pvdev->open_mutex);
+#ifdef VENDOR_EDIT
+/*Added by Jinshui.Liu@Camera 20150714 start for print camera time*/
+	if (!atomic_read(&pvdev->opened)) {
+		getnstimeofday(&ts);
+		rtc_time_to_tm(ts.tv_sec, &tm);
+		pr_info("%s: %d-%02d-%02d %02d:%02d:%02d.%09lu UTC\n", __func__,
+			tm.tm_year + 1900, tm.tm_mon + 1, tm.tm_mday,
+			tm.tm_hour, tm.tm_min, tm.tm_sec, ts.tv_nsec);
+	}
+ #endif
 
 	rc = camera_v4l2_fh_open(filep);
 	if (rc < 0) {
@@ -577,9 +580,6 @@ static int camera_v4l2_open(struct file *filep)
 
 	if (!atomic_read(&pvdev->opened)) {
 		pm_stay_awake(&pvdev->vdev->dev);
-
-		/* Disable power collapse latency */
-		msm_pm_qos_update_request(CAMERA_DISABLE_PC_LATENCY);
 
 		/* create a new session when first opened */
 		rc = msm_create_session(pvdev->vdev->num, pvdev->vdev);
@@ -614,8 +614,6 @@ static int camera_v4l2_open(struct file *filep)
 					__func__, __LINE__, rc);
 			goto post_fail;
 		}
-		/* Enable power collapse latency */
-		msm_pm_qos_update_request(CAMERA_ENABLE_PC_LATENCY);
 	} else {
 		rc = msm_create_command_ack_q(pvdev->vdev->num,
 			find_first_zero_bit((const unsigned long *)&opn_idx,
@@ -629,6 +627,7 @@ static int camera_v4l2_open(struct file *filep)
 	idx |= (1 << find_first_zero_bit((const unsigned long *)&opn_idx,
 				MSM_CAMERA_STREAM_CNT_BITS));
 	atomic_cmpxchg(&pvdev->opened, opn_idx, idx);
+	mutex_unlock(&pvdev->open_mutex);
 
 	return rc;
 
@@ -642,6 +641,7 @@ session_fail:
 vb2_q_fail:
 	camera_v4l2_fh_release(filep);
 fh_open_fail:
+	mutex_unlock(&pvdev->open_mutex);
 	return rc;
 }
 
@@ -667,8 +667,14 @@ static int camera_v4l2_close(struct file *filep)
 	struct msm_video_device *pvdev = video_drvdata(filep);
 	struct camera_v4l2_private *sp = fh_to_private(filep->private_data);
 	unsigned int opn_idx, mask;
+#ifdef VENDOR_EDIT
+/*Added by Jinshui.Liu@Camera 20150714 start for print camera time*/
+	struct timespec ts;
+	struct rtc_time tm;
+#endif
 	BUG_ON(!pvdev);
 
+	mutex_lock(&pvdev->open_mutex);
 	opn_idx = atomic_read(&pvdev->opened);
 	pr_debug("%s: close stream_id=%d\n", __func__, sp->stream_id);
 	mask = (1 << sp->stream_id);
@@ -686,17 +692,12 @@ static int camera_v4l2_close(struct file *filep)
 		camera_pack_event(filep, MSM_CAMERA_DEL_SESSION, 0, -1, &event);
 
 		/* Donot wait, imaging server may have crashed */
-
-		msm_post_event(&event, MSM_POST_EVT_TIMEOUT);
+		msm_post_event(&event, -1);
 		msm_delete_command_ack_q(pvdev->vdev->num, 0);
 
 		/* This should take care of both normal close
 		 * and application crashes */
 		msm_destroy_session(pvdev->vdev->num);
-
-		/* Enable power collapse latency */
-		msm_pm_qos_update_request(CAMERA_ENABLE_PC_LATENCY);
-
 		pm_relax(&pvdev->vdev->dev);
 	} else {
 		camera_pack_event(filep, MSM_CAMERA_SET_PARM,
@@ -712,6 +713,18 @@ static int camera_v4l2_close(struct file *filep)
 
 	camera_v4l2_vb2_q_release(filep);
 	camera_v4l2_fh_release(filep);
+
+#ifdef VENDOR_EDIT
+/*Added by Jinshui.Liu@Camera 20150714 start for print camera time*/
+	if (atomic_read(&pvdev->opened) == 0) {
+		getnstimeofday(&ts);
+		rtc_time_to_tm(ts.tv_sec, &tm);
+		pr_info("%s: %d-%02d-%02d %02d:%02d:%02d.%09lu UTC\n", __func__,
+			tm.tm_year + 1900, tm.tm_mon + 1, tm.tm_mday,
+			tm.tm_hour, tm.tm_min, tm.tm_sec, ts.tv_nsec);
+	}
+#endif
+	mutex_unlock(&pvdev->open_mutex);
 
 	return rc;
 }
@@ -805,6 +818,7 @@ int camera_init_v4l2(struct device *dev, unsigned int *session)
 #endif
 
 	*session = pvdev->vdev->num;
+	mutex_init(&pvdev->open_mutex);
 	atomic_set(&pvdev->opened, 0);
 	video_set_drvdata(pvdev->vdev, pvdev);
 	device_init_wakeup(&pvdev->vdev->dev, 1);

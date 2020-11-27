@@ -199,23 +199,6 @@ static int32_t msm_flash_i2c_init(
 			compat_ptr(power_setting_array32->power_down_setting);
 		flash_ctrl->power_setting_array.power_setting =
 			compat_ptr(power_setting_array32->power_setting);
-
-		/* Validate power_up array size and power_down array size */
-		if ((!flash_ctrl->power_setting_array.size) ||
-			(flash_ctrl->power_setting_array.size >
-			MAX_POWER_CONFIG) ||
-			(!flash_ctrl->power_setting_array.size_down) ||
-			(flash_ctrl->power_setting_array.size_down >
-			MAX_POWER_CONFIG)) {
-
-			pr_err("failed: invalid size %d, size_down %d",
-				flash_ctrl->power_setting_array.size,
-				flash_ctrl->power_setting_array.size_down);
-			kfree(power_setting_array32);
-			power_setting_array32 = NULL;
-			return -EINVAL;
-		}
-
 		memcpy(&flash_ctrl->power_setting_array.power_down_setting_a,
 			&power_setting_array32->power_down_setting_a,
 			sizeof(power_setting_array32->power_down_setting_a));
@@ -239,16 +222,6 @@ static int32_t msm_flash_i2c_init(
 		flash_ctrl->power_setting_array.size;
 	flash_ctrl->power_info.power_down_setting_size =
 		flash_ctrl->power_setting_array.size_down;
-
-	if ((flash_ctrl->power_info.power_setting_size > MAX_POWER_CONFIG) ||
-	(flash_ctrl->power_info.power_down_setting_size > MAX_POWER_CONFIG)) {
-		pr_err("%s:%d invalid power setting size=%d size_down=%d\n",
-			__func__, __LINE__,
-			flash_ctrl->power_info.power_setting_size,
-			flash_ctrl->power_info.power_down_setting_size);
-		rc = -EINVAL;
-		goto msm_flash_i2c_init_fail;
-	}
 
 	rc = msm_camera_power_up(&flash_ctrl->power_info,
 		flash_ctrl->flash_device_type,
@@ -943,9 +916,6 @@ static long msm_flash_subdev_do_ioctl(
 			break;
 		}
 		break;
-	case VIDIOC_MSM_FLASH_CFG:
-		pr_err("invalid cmd 0x%x received\n", cmd);
-		return -EINVAL;
 	default:
 		return msm_flash_subdev_ioctl(sd, cmd, arg);
 	}
@@ -1033,7 +1003,7 @@ static int32_t msm_flash_platform_probe(struct platform_device *pdev)
 	flash_ctrl->msm_sd.sd.devnode->fops = &msm_flash_v4l2_subdev_fops;
 
 	if (flash_ctrl->flash_driver_type == FLASH_DRIVER_PMIC)
-		rc = msm_torch_create_classdev(pdev, flash_ctrl);
+		rc = msm_torch_create_classdev(pdev, &flash_ctrl);
 
 	CDBG("probe success\n");
 	return rc;
