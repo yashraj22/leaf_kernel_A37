@@ -25,6 +25,7 @@
 #include "governor.h"
 
 static DEFINE_SPINLOCK(tz_lock);
+static struct workqueue_struct *workqueue;
 
 /*
  * FLOOR is 5msec to capture up to 3 re-draws

@@ -772,7 +772,7 @@ static void __ref do_hotplug(struct cpu_data *f)
 	mutex_lock(&lru_lock);
 	if (f->online_cpus > need) {
 		list_for_each_entry_safe(c, tmp, &f->lru, sib) {
-			if (!c->online || c->always_online_cpu)
+			if (!c->online)
 				continue;
 
 			if (f->online_cpus == need)
@@ -795,7 +795,7 @@ static void __ref do_hotplug(struct cpu_data *f)
 			goto done;
 
 		list_for_each_entry_safe(c, tmp, &f->lru, sib) {
-			if (!c->online || c->always_online_cpu)
+			if (!c->online)
 				continue;
 
 			if (f->online_cpus <= f->max_cpus)

@@ -20,7 +20,12 @@
 #include <asm/cputime.h>
 
 static spinlock_t cpufreq_stats_lock;
-
+static DEFINE_SPINLOCK(task_time_in_state_lock); /* task->time_in_state */
+static DEFINE_SPINLOCK(task_concurrent_active_time_lock);
+	/* task->concurrent_active_time */
+static DEFINE_SPINLOCK(task_concurrent_policy_time_lock);
+	/* task->concurrent_policy_time */
+static DEFINE_SPINLOCK(uid_lock); /* uid_hash_table */
 struct cpufreq_stats {
 	unsigned int cpu;
 	unsigned int total_trans;
@@ -431,6 +436,21 @@ static void cpufreq_stats_update_policy_cpu(struct cpufreq_policy *policy)
 			policy->last_cpu);
 	per_cpu(cpufreq_stats_table, policy->last_cpu) = NULL;
 	stat->cpu = policy->cpu;
+}
+
+void cpufreq_task_stats_init(struct task_struct *p)
+{
+	unsigned long flags;
+	spin_lock_irqsave(&task_time_in_state_lock, flags);
+	p->time_in_state = NULL;
+	spin_unlock_irqrestore(&task_time_in_state_lock, flags);
+	WRITE_ONCE(p->max_states, 0);
+	spin_lock_irqsave(&task_concurrent_active_time_lock, flags);
+	p->concurrent_active_time = NULL;
+	spin_unlock_irqrestore(&task_concurrent_active_time_lock, flags);
+	spin_lock_irqsave(&task_concurrent_policy_time_lock, flags);
+	p->concurrent_policy_time = NULL;
+	spin_unlock_irqrestore(&task_concurrent_policy_time_lock, flags);
 }
 
 static void cpufreq_powerstats_create(unsigned int cpu,

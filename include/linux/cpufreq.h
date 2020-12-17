@@ -490,8 +490,10 @@ static inline int cpufreq_generic_exit(struct cpufreq_policy *policy)
 
 #ifdef CONFIG_CPU_FREQ_STAT
 void acct_update_power(struct task_struct *p, cputime_t cputime);
+void cpufreq_task_stats_init(struct task_struct *p);
 #else
 static inline void acct_update_power(struct task_struct *p, cputime_t cputime) {}
+static inline void cpufreq_task_stats_init(struct task_struct *p);
 #endif
 
 bool StreamStatus(void);

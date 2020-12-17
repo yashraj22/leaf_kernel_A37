@@ -229,6 +229,23 @@ static __always_inline void __assign_once_size(volatile void *p, void *res, int 
 	}
 }
 
+static __always_inline void __write_once_size(volatile void *p, void *res, int size)
+{
+	switch (size) {
+	case 1: *(volatile __u8 *)p = *(__u8 *)res; break;
+	case 2: *(volatile __u16 *)p = *(__u16 *)res; break;
+	case 4: *(volatile __u32 *)p = *(__u32 *)res; break;
+#ifdef CONFIG_64BIT
+	case 8: *(volatile __u64 *)p = *(__u64 *)res; break;
+#endif
+	default:
+		barrier();
+		__builtin_memcpy((void *)p, (const void *)res, size);
+		data_access_exceeds_word_size();
+		barrier();
+	}
+}
+
 /*
  * Prevent the compiler from merging or refetching reads or writes. The
  * compiler is also forbidden from reordering successive instances of
@@ -256,6 +273,9 @@ static __always_inline void __assign_once_size(volatile void *p, void *res, int 
 
 #define ASSIGN_ONCE(val, x) \
 	({ typeof(x) __val; __val = val; __assign_once_size(&x, &__val, sizeof(__val)); __val; })
+
+#define WRITE_ONCE(x, val) \
+	({ typeof(x) __val; __val = val; __write_once_size(&x, &__val, sizeof(__val)); __val; })
 
 #endif /* __KERNEL__ */
 
